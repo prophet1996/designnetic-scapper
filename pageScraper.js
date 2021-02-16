@@ -27,10 +27,29 @@ const scraperObject = {
     let workers = [];
     categories.forEach((category) => {
       workers.push(
-        new Promise(async (resolve, reject) => {
-          category = category.toLowerCase().trim();
-          category = category.split(" ").join("-");
-          await page.goto(path.join(baseUrl, "collections", category));
+        async () => {
+          console.log(category)
+          category = category.toLowerCase().trim().replace("/","");
+          const categorySplit = category.split(" ");
+          console.log(categorySplit);
+          if (categorySplit.includes('&amp;')){
+            category = categorySplit[0];
+          }else {
+            category = categorySplit.filter(v=>v.length>2).join("-");
+          }
+          console.log(category)
+          const newPath = path.join(baseUrl, "collections", category);
+          await page.goto(newPath);
+          const is404page = await is404(page);
+          if(is404page){
+            fs.appendFile("404s.txt", `${category.toString()}:${newPath} \n`, (err) => {
+              if (err) {
+                console.log('error writing 404s');
+              }
+              console.log("writing 404 error");
+            });
+            return [];
+          }
           const products = await page.$$eval(
             "#shopify-section-collection-template > div > div.blocklayout.do-infinite > div > div.sub > div.desktop-only",
             (items) => {
@@ -40,22 +59,31 @@ const scraperObject = {
               );
             }
           );
-          resolve(products);
-        })
+          return products;
+          }
       );
     });
     const productsFromEachCategory = [];
-    workers = workers.slice(0, 3);
+    // workers = workers.slice(7,8);
     for (const getProducts of workers) {
-      productsFromEachCategory.push(await getProducts);
-      console.log(getProducts);
+      const products = await getProducts();
+      if(products)
+      productsFromEachCategory.push();
     }
-    fs.writeFile("products-listings.txt", productsFromEachCategory, (err) => {
+    fs.appendFile("products-listings.txt", `${productsFromEachCategory.toString()}\n   `, (err) => {
       if (err) {
         console.log("write error");
       }
     });
+    
   },
 };
+
+const is404 = async (page)=>{
+            const map=  await page.$$eval('#content > div.content-header',headers=>{
+              return headers.map(header => header.querySelector('.page-title').innerHTML)
+            })
+            return map[0]==='404 Page Not Found';
+}
 
 module.exports = scraperObject;
